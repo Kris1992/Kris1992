@@ -1,0 +1,35 @@
+#js-map-container {
+    height: calc(100vh - 56px);
+    width: auto;
+    background-color: gray;
+}
+
+#js-map-bar {
+    z-index: 999;
+    position: absolute; 
+    top: 0px; 
+    left: 0px; 
+    background-color: rgba(00, 130, 130, 0.8);
+    color: white;
+    width: 100%;
+}
+
+.info-panel {
+    font-size: 12px;
+}
+
+.custom-size {
+    width: 90%;
+    font-size: 16px;
+}
+
+.bubble-title, 
+.bubble-description {
+    font-size: 14px;
+}
+
+@media (max-height: 400px) {
+    .custom-size {
+        width: 80%;
+    }
+}
