@@ -40,6 +40,9 @@
     clip-path: polygon(0 0, var(--ribbon-size) 50%, 0 100%, 100% 100%, 100% 0);
 }
 
+.card-image-top {
+    max-width: 350px;
+}
 
 @media (max-height: 400px) {
     .custom-size {

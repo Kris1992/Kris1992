@@ -286,11 +286,32 @@ function addClickEventListener() {
     });
 }
 
+/**
+ * Takes a snapshot of the map.
+ */
+function capture() {
+  map.capture((canvas) => {
+    if (canvas) {
+        canvas.style.width = '350px';
+        canvas.style.height = '250px';
+        // // ...then set the internal size to match
+        // canvas.width  = 350;
+        // canvas.height = 250;
+      $('.js-image-map').last().append(canvas);
+      return;
+    }
+    
+    showMapResponse('Błąd', 'Niestety nie udało się dodać zdjęcia, ponieważ przeglądarka nie wspiera takiej funkcjonalności', 'danger');
+    resultContainer.innerHTML = 'Capturing is not supported';
+  }, [ui]);
+}
+
+
 function savePlace() {
     const cardHtml = `
     <div class="col-12">
         <div class="card js-place-card" data-marker-id="${lastBubbleMarker.id}">
-            <img src="http://placekitten.com/g/200/100" class="card-img-top" alt="...">
+            <div class="card-image-top js-image-map"></div>
             <div class="card-body">
                 <h5 class="card-title">${lastBubbleMarker.title}</h5>
                 <p class="card-text">${lastBubbleMarker.description}</p>
@@ -301,6 +322,9 @@ function savePlace() {
     </div>`;
     $('#js-empty-saved-places').hide();
     $('#js-saved-places-list').append(cardHtml);
+
+
+    capture();
 }
 
 /**
