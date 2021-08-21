@@ -293,10 +293,7 @@ function capture() {
   map.capture((canvas) => {
     if (canvas) {
         canvas.style.width = '350px';
-        canvas.style.height = '250px';
-        // // ...then set the internal size to match
-        // canvas.width  = 350;
-        // canvas.height = 250;
+        canvas.style.height = 'auto';
       $('.js-image-map').last().append(canvas);
       return;
     }
@@ -315,7 +312,7 @@ function savePlace() {
             <div class="card-body">
                 <h5 class="card-title">${lastBubbleMarker.title}</h5>
                 <p class="card-text">${lastBubbleMarker.description}</p>
-                <a href="#" role="button" class="btn btn-danger">Usuń znacznik</a>
+                <a href="#" role="button" class="btn btn-danger js-remove-bubble-marker">Usuń znacznik</a>
                 <a href="#" role="button" class="btn btn-primary js-navigate-to-bubble-marker">Pokaż na mapie</a>
             </div>
         </div>
@@ -468,19 +465,41 @@ function trimString(text, length = 20) {
             //         lng: coord.lng
             //     }
             // });
+            // 
+
+
+/**
+ * Get bubble marker id from card
+ * @param  {jQueryObject} $clickedItem 
+ * @return {number} 
+ */
+function getCardBubbleMarkerId($clickedItem) {
+    const $placeCard = $clickedItem.closest('.js-place-card').first();
+    return parseInt($placeCard.attr('data-marker-id'), 10);
+}
 
 $(document).ready(function() {
     window.addEventListener('resize', () => map.getViewPort().resize());
     $(document).on('click', '.js-navigate-to-bubble-marker', function() {
-        const $placeCard = $(this).closest('.js-place-card').first();
-        const bubbleMarkerId = parseInt($placeCard.attr('data-marker-id'), 10);
-
+        const bubbleMarkerId = getCardBubbleMarkerId($(this));
         const bubbleMarker = group.getObjects().filter((item) => {
             return item.getId() === bubbleMarkerId;
         });
 
         setMapView(bubbleMarker[0].getGeometry());
     });
+
+    $(document).on('click', '.js-remove-bubble-marker', function() {
+        const bubbleMarkerId = getCardBubbleMarkerId($(this));
+        const bubbleMarker = group.getObjects().filter((item) => {
+            return item.getId() === bubbleMarkerId;
+        });
+
+        group.removeObject(bubbleMarker[0]);
+    });
+
+
+    
     addClickEventListener();
 
 
