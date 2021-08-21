@@ -11,6 +11,7 @@ let group = new H.map.Group();
 let rangeGroupCircle = new H.map.Group();//unused now
 let rangeGroupPoints = new H.map.Group();
 let polyLinesGroup = new H.map.Group();
+let polygonGroup = new H.map.Group();
 
 
 let lastBubbleMarker = {
@@ -304,10 +305,10 @@ function capture() {
 }
 
 
-function savePlace() {
+
+function savePlace(polygonId) {
     const cardHtml = `
-    <div class="col-12">
-        <div class="card js-place-card" data-marker-id="${lastBubbleMarker.id}">
+        <div class="card js-place-card" data-marker-id="${lastBubbleMarker.id}" data-polygon-id="${polygonId}">
             <div class="card-image-top js-image-map"></div>
             <div class="card-body">
                 <h5 class="card-title">${lastBubbleMarker.title}</h5>
@@ -316,12 +317,13 @@ function savePlace() {
                 <a href="#" role="button" class="btn btn-primary js-navigate-to-bubble-marker">Pokaż na mapie</a>
             </div>
         </div>
-    </div>`;
+    `;
     $('#js-empty-saved-places').hide();
     $('#js-saved-places-list').append(cardHtml);
 
-
-    capture();
+    setTimeout(() => {
+        capture();
+    }, 2000);
 }
 
 /**
@@ -405,17 +407,18 @@ function drawRangePolygon() {
         return;
     }
 
+    const polygon = new H.map.Polygon(rangeLineString, {
+        style: {
+            fillColor: 'rgba(0, 255, 221, 0.66)',
+            strokeColor: 'rgba(0, 255, 221, 1)',
+            lineWidth: 2
+        }
+    });
+
+    polygonGroup.addObject(polygon);
     
-    map.addObject(
-        new H.map.Polygon(rangeLineString, {
-            style: {
-                fillColor: 'rgba(0, 255, 221, 0.66)',
-                strokeColor: 'rgba(0, 255, 221, 1)',
-                lineWidth: 2
-            }
-        })
-    );
-    savePlace();
+    map.addObject(polygonGroup);
+    savePlace(polygon.getId());
 }
 
 /**
@@ -470,18 +473,27 @@ function trimString(text, length = 20) {
 
 /**
  * Get bubble marker id from card
- * @param  {jQueryObject} $clickedItem 
+ * @param  {jQueryObject} $placeCard 
  * @return {number} 
  */
-function getCardBubbleMarkerId($clickedItem) {
-    const $placeCard = $clickedItem.closest('.js-place-card').first();
+function getCardBubbleMarkerId($placeCard) {
     return parseInt($placeCard.attr('data-marker-id'), 10);
+}
+
+/**
+ * Get polygon id from card
+ * @param  {jQueryObject} $placeCard 
+ * @return {number} 
+ */
+function getCardPolygonId($placeCard) {
+    return parseInt($placeCard.attr('data-polygon-id'), 10);
 }
 
 $(document).ready(function() {
     window.addEventListener('resize', () => map.getViewPort().resize());
     $(document).on('click', '.js-navigate-to-bubble-marker', function() {
-        const bubbleMarkerId = getCardBubbleMarkerId($(this));
+        const $placeCard = $(this).closest('.js-place-card').first();
+        const bubbleMarkerId = getCardBubbleMarkerId($placeCard);
         const bubbleMarker = group.getObjects().filter((item) => {
             return item.getId() === bubbleMarkerId;
         });
@@ -490,12 +502,24 @@ $(document).ready(function() {
     });
 
     $(document).on('click', '.js-remove-bubble-marker', function() {
-        const bubbleMarkerId = getCardBubbleMarkerId($(this));
-        const bubbleMarker = group.getObjects().filter((item) => {
+        const $placeCard = $(this).closest('.js-place-card').first();
+        const bubbleMarkerId = getCardBubbleMarkerId($placeCard);
+        const bubbleMarkers = group.getObjects().filter((item) => {
             return item.getId() === bubbleMarkerId;
         });
 
-        group.removeObject(bubbleMarker[0]);
+        group.removeObject(bubbleMarkers[0]);
+
+        const polygonId = getCardPolygonId($placeCard);
+        const polygons = polygonGroup.getObjects().filter((item) => {
+            return item.getId() === polygonId;
+        });
+
+        polygonGroup.removeObject(polygons[0]);
+        $placeCard.fadeOut(300, function() {
+            $(this).remove();
+        });
+
     });
 
 
