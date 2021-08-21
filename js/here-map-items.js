@@ -5,12 +5,32 @@ const platform = configPlatform();
 const defaultLayers = configLayers();
 let searchMarker;
 let markerMode = false;
-
+let rangeMode = false;
 
 let group = new H.map.Group();
+let rangeGroupCircle = new H.map.Group();//unused now
+let rangeGroupPoints = new H.map.Group();
+let polyLinesGroup = new H.map.Group();
 
 
-var markers = [];
+let lastBubbleMarker = {
+    id: null,
+    title: null,
+    description: null
+};
+
+
+/* Arrays with data */
+let markers = [];
+let rangeMarkers = [];
+
+let rangeLineString = [];
+let rangePolylines = [];
+
+
+
+
+
 var waypoints = [];
 var routePolylines = [];
 var distanceTotal = null;
@@ -24,18 +44,26 @@ var map = new H.Map(
     }
 );
 
-var ui = H.ui.UI.createDefault(map, defaultLayers);
-var mapEvents = new H.mapevents.MapEvents(map);
-var behavior = new H.mapevents.Behavior(mapEvents);
-var icon  = setCustomMarker();
+const ui = H.ui.UI.createDefault(map, defaultLayers);
+const mapEvents = new H.mapevents.MapEvents(map);
+const behavior = new H.mapevents.Behavior(mapEvents);
+let icon = setCustomMarker();
 
 //const lineString = new H.geo.LineString();
 var routingService = platform.getRoutingService();
-var searchService = platform.getSearchService();
+const searchService = platform.getSearchService();
 
 initMapView();
 
 /** FUNCTIONS */
+
+/**
+ * Get init position if geolocation is not supported
+ * @return {object}
+ */
+function getInitPosition() {
+    return {lng: 18.562839672106392, lat: 50.215545083510094};
+}
 
 /**
  * Set map view to user current position
@@ -45,10 +73,28 @@ function initMapView() {
         getActualPosition().then((currentPos) => {
             const currentCoords = currentPos.coords;
             setMapView(currentCoords);
+        }).catch(() => {
+            const currentCoords = getInitPosition();
+            setMapView(currentCoords);
         });
     } else {
-        alert('Geolocation is not supported.');
+        const currentCoords = getInitPosition();
+        setMapView(currentCoords);
+        alert('Geolokalizacja nie jest wspierana.');
     }
+}
+
+/**
+ * Set view of map
+ * @param {Array} currentCoords Array with position coords to show on the map
+ */
+function setMapView(currentCoords) {
+    if (currentCoords.latitude) {
+        map.setCenter({lat: currentCoords.latitude, lng: currentCoords.longitude});
+        return;
+    } 
+    
+    map.setCenter({lat: currentCoords.lat, lng: currentCoords.lng});
 }
 
 /**
@@ -161,15 +207,18 @@ function toggleSearchMarker() {
 
 /**
  * Toggle marker mode
+ * @param {jQueryObject} $markerModeBtn
  */
-function toggleMarkerMode() {
+function toggleMarkerMode($markerModeBtn) {
     if (markerMode) {
         markerMode = false;
+        $markerModeBtn.removeClass('.active');
         $('#js-info-panel').text('Tryb zaznaczania jest wyłączony');
         return;
     }
 
     markerMode = true;
+    $markerModeBtn.addClass('.active');
     $('#js-info-panel').text('Tryb zaznaczania został włączony');
 }
 
@@ -177,8 +226,21 @@ function toggleMarkerMode() {
  * Add click event listener to map
  */
 function addClickEventListener() {
-    map.addEventListener('tap',async (evt) => {
+    map.addEventListener('tap', async (evt) => {
         if (!markerMode) {
+            return;
+        }
+
+        const coord = map.screenToGeo(
+            evt.currentPointer.viewportX,
+            evt.currentPointer.viewportY
+        );
+
+        if (rangeMode) {
+            if (rangeMarkers.length > 1) {
+                $('#js-stop-add-range').prop('disabled', false);
+            }
+            addPointsToRange(coord);
             return;
         }
 
@@ -189,11 +251,9 @@ function addClickEventListener() {
                 <input class="swal2-input custom-size d-flex" id="swal-bubble-title" placeholder="Tytuł np. nazwa firmy" type="text">
                 <label for="swal-bubble-description" class="swal2-input-label">Opis:</label>
                 <textarea aria-label="Umieść tutaj opis..." class="swal2-textarea custom-size d-flex" placeholder="Umieść tutaj opis..." id="swal-bubble-description"></textarea>
-                <div class="d-inline-flex">
+                <div class="d-inline-flex align-items-center mt-2">
                     <input id="swal-bubble-range" type="checkbox" checked="true">
-                    <label for="swal-bubble-range" class="swal2-checkbox">
-                        <span class="swal2-label">Chcę dodać obszar</span>
-                    </label>
+                    <span class="ms-2 swal2-label">Chcę dodać obszar</span>
                 </div>
                 `,
             showClass: {
@@ -213,37 +273,136 @@ function addClickEventListener() {
         });
 
         if (formValues) {
-            const coord = map.screenToGeo(
-                evt.currentPointer.viewportX,
-                evt.currentPointer.viewportY
-            );
-
-            Swal.fire(JSON.stringify(formValues));
             const [title, description, range] = formValues;
-            console.log(formValues);
             addInfoBubble(title, description, coord);
+
+            if (range) {
+                $('#js-add-marker').prop('disabled', true);
+                showMapResponse('Dodawanie zasięgu zostało wlączone', 'Klikaj w punkty, aby określić zasięg...', 'info')
+                $('#js-info-panel').text('Klikaj w punkty, aby określić zasięg...');
+                rangeMode = true;
+            }
         }
     });
 }
 
+function savePlace() {
+    const cardHtml = `
+    <div class="col-12">
+        <div class="card js-place-card" data-marker-id="${lastBubbleMarker.id}">
+            <img src="http://placekitten.com/g/200/100" class="card-img-top" alt="...">
+            <div class="card-body">
+                <h5 class="card-title">${lastBubbleMarker.title}</h5>
+                <p class="card-text">${lastBubbleMarker.description}</p>
+                <a href="#" role="button" class="btn btn-danger">Usuń znacznik</a>
+                <a href="#" role="button" class="btn btn-primary js-navigate-to-bubble-marker">Pokaż na mapie</a>
+            </div>
+        </div>
+    </div>`;
+    $('#js-empty-saved-places').hide();
+    $('#js-saved-places-list').append(cardHtml);
+}
+
 /**
  * Creates a new marker and adds it to a group
- * @param {H.map.Group} group       The group holding the new marker
  * @param {H.geo.Point} coordinate  The location of the marker
- * @param {String} html             Data associated with the marker
+ * @param {String} bubbleTitle          Marker title
+ * @param {String} bubbleDescription    Marker description
  */
-function addMarkerToGroup(group, coordinate, html) {
-  var marker = new H.map.Marker(coordinate, { icon: icon });
-  // add custom data to the marker
-  marker.setData(html);
-  group.addObject(marker);
-  markers.push(marker);
+function addMarkerToGroup(coordinate, bubbleTitle, bubbleDescription) {
+    const html = `
+            <div class="fw-bold bubble-title">${bubbleTitle}</div>
+            <div class="bubble-description">${bubbleDescription}</div>
+
+        `;
+    const outerElement = `<div class="marker-ribbon">${trimString(bubbleTitle)}</div>`;
+    const domIcon = new H.map.DomIcon(outerElement, {});
+    let marker = new H.map.DomMarker(coordinate, {
+        icon: domIcon
+    });
+    
+    lastBubbleMarker.id = marker.getId();
+    lastBubbleMarker.title = bubbleTitle;
+    lastBubbleMarker.description = bubbleDescription;
+
+    marker.setData(html);
+    group.addObject(marker);
+    markers.push(marker);
+}
+
+/**
+ * Creates a new range point marker
+ * @param {H.geo.Point} coordinate  The location of the marker
+ */
+function addPointsToRange(coordinate) {
+    const marker = new H.map.Marker(coordinate, {
+        icon: icon
+    });
+  
+    rangeGroupPoints.addObject(marker);
+    rangeMarkers.push(marker);
+    map.addObject(rangeGroupPoints);
+    drawRangeLine();
+}
+
+/**
+ * Draw line from range points
+ */
+function drawRangeLine() {
+    if (rangeMarkers.length < 2) {
+        return;
+    }
+
+    rangeLineString = new H.geo.LineString();
+    rangeMarkers.forEach(routeCoord => {
+        rangeLineString.pushLatLngAlt(routeCoord.b.lat, routeCoord.b.lng, 0);
+    });
+
+    if (true) {
+        const polyline = new H.map.Polyline(
+            rangeLineString, 
+            {
+                style: 
+                    {
+                        strokeColor: 'rgb(0, 130, 130)',
+                        lineWidth: 2
+                    }
+            }
+        );
+
+        polyLinesGroup.addObject(polyline);
+        rangePolylines.push(polyline); 
+        map.addObject(polyLinesGroup);
+    }
+}
+
+/**
+ * Draw range polygon
+ */
+function drawRangePolygon() {
+    if (rangeMarkers.length < 3) {
+        return;
+    }
+
+    
+    map.addObject(
+        new H.map.Polygon(rangeLineString, {
+            style: {
+                fillColor: 'rgba(0, 255, 221, 0.66)',
+                strokeColor: 'rgba(0, 255, 221, 1)',
+                lineWidth: 2
+            }
+        })
+    );
+    savePlace();
 }
 
 /**
  * Add two markers showing the position of Liverpool and Manchester City football clubs.
  * Clicking on a marker opens an infobubble which holds HTML content related to the marker.
- * @param {H.Map} map A HERE Map instance within the application
+ * @param {string} bubbleTitle
+ * @param {string} bubbleDescription
+ * @param {object} coord
  */
 function addInfoBubble(bubbleTitle, bubbleDescription, coord) {
     map.addObject(group);
@@ -260,20 +419,21 @@ function addInfoBubble(bubbleTitle, bubbleDescription, coord) {
         ui.addBubble(bubble);
     }, false);
 
-    // const length = 40;
-    // var trimmedString = string.length > length ? 
-    //                 string.substring(0, length - 3) + "..." : 
-    //                 string;
-
     addMarkerToGroup(
-        group, 
         {lat: coord.lat, lng: coord.lng },
-        `
-            <div class="fw-bold bubble-title">${bubbleTitle}</div>
-            <div class="bubble-description">${bubbleDescription}</div>
+        bubbleTitle,
+        bubbleDescription
+    );
+}
 
-        `
-        );
+/**
+ * trim string 
+ * @param  {string} text   
+ * @param  {Number} length 
+ * @return {string}
+ */
+function trimString(text, length = 20) {
+    return text.length > length ? text.substring(0, length - 3) + '...' : text;
 }
 
 
@@ -286,6 +446,22 @@ function addInfoBubble(bubbleTitle, bubbleDescription, coord) {
             // });
 
 $(document).ready(function() {
+    window.addEventListener('resize', () => map.getViewPort().resize());
+    $(document).on('click', '.js-navigate-to-bubble-marker', function() {
+        const $placeCard = $(this).closest('.js-place-card').first();
+        const bubbleMarkerId = parseInt($placeCard.attr('data-marker-id'), 10);
+
+        const bubbleMarker = group.getObjects().filter((item) => {
+            return item.getId() === bubbleMarkerId;
+        });
+
+        setMapView(bubbleMarker[0].getGeometry());
+    });
+    addClickEventListener();
+
+
+
+
     $('#js-current-position').click(() => {
         showCurrentLocation();
     });
@@ -299,10 +475,27 @@ $(document).ready(function() {
     });
 
     $('#js-add-marker').click(() => {
-        toggleMarkerMode();
+        toggleMarkerMode($(this));
     });
 
-    addClickEventListener();
+    $('#js-stop-add-range').click(() => {
+        const $addMarkerBtn = $('#js-add-marker');
+        toggleMarkerMode($addMarkerBtn);
+        $addMarkerBtn.prop('disabled', false);
+
+        $('#js-stop-add-range').prop('disabled', true);
+        drawRangePolygon();
+
+        rangeMode = false;
+        rangeGroupPoints.removeAll();
+        polyLinesGroup.removeAll();
+        
+        rangeMarkers.length = 0;
+        rangeLineString.length = 0;
+        rangePolylines.length = 0;
+
+    });
+    
 
   
     //document.getElementById("remove-last-js").addEventListener("click", removeLastWaypointMarker);
@@ -310,6 +503,35 @@ $(document).ready(function() {
     //document.getElementById("continue-js").addEventListener("click", sendData);
     //document.getElementById("remove-message-js").addEventListener("click", removeMapResponse);
 });
+
+/**
+ * Set custom marker
+ */
+function setCustomMarker() {
+    var svgMarkup = '<svg width="14" height="14" xmlns="http://www.w3.org/2000/svg">' +
+    '<circle fill="royalblue" cx="7" cy="7" r="7" /></svg>';
+
+    return new H.map.Icon(svgMarkup);
+}
+
+/* Config functions */
+function configPlatform() {
+    return new H.service.Platform({
+        'apikey': window.apikey,
+    });
+}
+
+function configLayers() {
+    return platform.createDefaultLayers();
+}
+
+
+
+
+
+
+
+
 
 
 
@@ -337,6 +559,49 @@ function calculateDistance(isRemovedMarker = false)
         });            
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /**
  * calculateRouteData Prepare and do call to api
@@ -418,12 +683,6 @@ function resetDistance()
     document.getElementById('distance-js').innerHTML = "0 m";
 }
 
-
-
-
-
-
-
 /**
  * removeMapResponse Remove info panel message
  */
@@ -436,17 +695,6 @@ function removeMapResponse()
     });
 }
 
-/**
- * setMapView Set view of map
- * @param {Array} currentCoords Array  with position coords to show on the map
- */
-function setMapView(currentCoords) {
-    if (currentCoords.latitude) {
-        map.setCenter({lat: currentCoords.latitude, lng: currentCoords.longitude});
-    } else {
-        map.setCenter({lat: currentCoords.lat, lng: currentCoords.lng});
-    }   
-}
 
 /**
  * removeLastWaypointMarker Remove last route marker
@@ -649,27 +897,3 @@ function removeFormErrors() {
     $form.find('.js-field-error').remove();
     $form.find('.form-group').removeClass('has-error');
 }
-
-/*
-            Config functions
-*/
-function configPlatform() {
-    return new H.service.Platform({
-        'apikey': window.apikey,
-    });
-}
-
-function configLayers() {
-    return platform.createDefaultLayers();
-}
-
-/**
- * setCustomMarker Set custom marker
- */
-function setCustomMarker() {
-    var svgMarkup = '<svg width="14" height="14" xmlns="http://www.w3.org/2000/svg">' +
-    '<circle fill="royalblue" cx="7" cy="7" r="7" /></svg>';
-
-    return new H.map.Icon(svgMarkup);
-}
-

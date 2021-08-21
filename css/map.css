@@ -28,6 +28,19 @@
     font-size: 14px;
 }
 
+.marker-ribbon {
+    --ribbon-size: 10px;
+    --ribbon-padding: 5px;
+    padding: var(--ribbon-padding);
+    padding-inline-start: calc(var(--ribbon-size) + var(--ribbon-padding));
+    border-radius: 5px;
+    background-color: #00ced1;
+    color: #fff;
+    width: fit-content;
+    clip-path: polygon(0 0, var(--ribbon-size) 50%, 0 100%, 100% 100%, 100% 0);
+}
+
+
 @media (max-height: 400px) {
     .custom-size {
         width: 80%;

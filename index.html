@@ -2,10 +2,10 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <meta name="description" content="Fit Aplication"/>
-        <meta name="keywords" content="Fit Aplication"/>
+        <meta name="description" content="Mapy Cygi"/>
+        <meta name="keywords" content="Mapy Cygi"/>
         <meta http-equiv="X-UA-Compatible" content="IE=edge, chrome=1"/>
-        <meta name="author" content="KrakovDev01">
+        <meta name="author" content="Kris1992">
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"/>
         
         <title>Cygmap</title>
@@ -34,6 +34,11 @@
                                 </button>
                                 <div class="collapse navbar-collapse" id="js-menu-items">
                                     <ul class="navbar-nav ms-auto">
+                                        <li class="nav-item">
+                                            <a class="nav-link" role="button" data-bs-toggle="offcanvas" href="#js-saved-places">
+                                                Miejsca
+                                            </a>
+                                        </li>
                                         <li class="nav-item dropdown">
                                             <a class="nav-link dropdown-toggle" href="#" id="js-user-account-menu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                                 Moje Konto
@@ -54,12 +59,33 @@
                     <!-- MAP CONTENT -->
                     <main>
                         <div class="container-fluid">
+                            <div class="offcanvas offcanvas-start" tabindex="-1" id="js-saved-places" aria-labelledby="offcanvas-saved-places-label">
+                                <div class="offcanvas-header">
+                                    <h5 class="offcanvas-title" id="offcanvas-saved-places-label">Twoje zapisane miejsca</h5>
+                                    <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                                </div>
+                                <div class="offcanvas-body">
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div id="js-empty-saved-places">
+                                                <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                                                    <strong>Uwaga!</strong> Niestety lista zapisanych miejsc jest obecnie pusta, aby to zmienić dodaj jakieś znaczniki na mapie...
+                                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row" id="js-saved-places-list">
+                                        
+                                    </div>
+                                </div>
+                            </div>
                             <div class="row">
                                 <div class="col-12 p-0">
                                     <div id="js-map-container" style="position: relative;">
                                         <div id="js-map-bar">
                                             <div class="col-12 border border-2 border-white" id="js-geolocation-menu">
-                                                <div class="row p-0 mx-0 my-2">
+                                                <div class="row p-0 mx-0 my-1">
                                                     <div class="col-5">
                                                         <div class="input-group">
                                                             <input type="search" name="geolocationSearch" class="form-control" placeholder="np. ulica, miasto, kraj" id="js-geolocation">
@@ -79,6 +105,9 @@
                                                         </button>   
                                                     </div>
                                                     <div class="col-4 text-end">
+                                                        <button class="btn btn-danger" type="button" role="button" data-toggle="tooltip" data-placement="top" title="Zatrzymaj dodawanie punktów zasięgu" id="js-stop-add-range" disabled="true">
+                                                            <i class="fas fa-stop-circle"></i>
+                                                        </button>  
                                                         <button class="btn btn-primary" type="button" role="button" data-toggle="tooltip" data-placement="top" title="Dodaj marker z opisem" id="js-add-marker">
                                                             <i class="fas fa-map-marker"></i> 
                                                         </button>  
