@@ -6,9 +6,9 @@ const defaultLayers = configLayers();
 let searchMarker;
 let markerMode = false;
 let rangeMode = false;
+let rangeColor = null;
 
 let group = new H.map.Group();
-let rangeGroupCircle = new H.map.Group();//unused now
 let rangeGroupPoints = new H.map.Group();
 let polyLinesGroup = new H.map.Group();
 let polygonGroup = new H.map.Group();
@@ -176,10 +176,9 @@ function getLocationFromSearch() {
     const locationSearch = $('#js-geolocation').val();
     if (locationSearch) {
         searchService.geocode({
-            q: locationSearch
+            q: `${locationSearch}, Polska`
         }, (result) => {
             result.items.forEach((item) => {
-                console.log(item.position);
                 showSearchMarker(item.position);
                 enableButton($searchButton);
             });
@@ -224,6 +223,20 @@ function toggleMarkerMode($markerModeBtn) {
 }
 
 /**
+ * Convert hex color to rgb
+ * @param  {string} hex
+ * @return {string} 
+ */
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : null;
+}
+
+/**
  * Add click event listener to map
  */
 function addClickEventListener() {
@@ -252,11 +265,16 @@ function addClickEventListener() {
                 <input class="swal2-input custom-size d-flex" id="swal-bubble-title" placeholder="Tytuł np. nazwa firmy" type="text">
                 <label for="swal-bubble-description" class="swal2-input-label">Opis:</label>
                 <textarea aria-label="Umieść tutaj opis..." class="swal2-textarea custom-size d-flex" placeholder="Umieść tutaj opis..." id="swal-bubble-description"></textarea>
+                <div class="d-flex justify-content-center align-items-center mt-2">
+                    <label for="swal-bubble-color" class="swal2-input-label m-0">Wybierz kolor:</label>
+                    <input type="color" id="swal-bubble-color" value="#ff0000">
+                </div>
                 <div class="d-inline-flex align-items-center mt-2">
                     <input id="swal-bubble-range" type="checkbox" checked="true">
                     <span class="ms-2 swal2-label">Chcę dodać obszar</span>
                 </div>
                 `,
+            showCancelButton: true,
             showClass: {
                 popup: 'animate__animated animate__fadeInDown'
             },
@@ -268,21 +286,27 @@ function addClickEventListener() {
                 return [
                     $('#swal-bubble-title').val(),
                     $('#swal-bubble-description').val(),
-                    $('#swal-bubble-range').prop('checked')
+                    $('#swal-bubble-range').prop('checked'),
+                    $('#swal-bubble-color').val()
                 ];
             }
         });
 
         if (formValues) {
-            const [title, description, range] = formValues;
-            addInfoBubble(title, description, coord);
-
+            const [title, description, range, color] = formValues;
+            addInfoBubble(title, description, coord, color);
+            rangeColor = hexToRgb(color);
+            
             if (range) {
                 $('#js-add-marker').prop('disabled', true);
                 showMapResponse('Dodawanie zasięgu zostało wlączone', 'Klikaj w punkty, aby określić zasięg...', 'info')
                 $('#js-info-panel').text('Klikaj w punkty, aby określić zasięg...');
                 rangeMode = true;
+                return;
             }
+
+            savePlace(color);
+            toggleMarkerMode($('#js-add-marker'));
         }
     });
 }
@@ -305,16 +329,29 @@ function capture() {
 }
 
 
-
-function savePlace(polygonId) {
+/**
+ * Save place after add info about it
+ * @param  {string} color
+ * @param  {mixed} polygonId polygon id or null
+ */
+function savePlace(color, polygonId = null) {
     const cardHtml = `
-        <div class="card js-place-card" data-marker-id="${lastBubbleMarker.id}" data-polygon-id="${polygonId}">
+        <div class="card js-place-card" data-marker-id="${lastBubbleMarker.id}" data-color="${color}" data-polygon-id="${polygonId || ''}">
             <div class="card-image-top js-image-map"></div>
             <div class="card-body">
-                <h5 class="card-title">${lastBubbleMarker.title}</h5>
-                <p class="card-text">${lastBubbleMarker.description}</p>
-                <a href="#" role="button" class="btn btn-danger js-remove-bubble-marker">Usuń znacznik</a>
-                <a href="#" role="button" class="btn btn-primary js-navigate-to-bubble-marker">Pokaż na mapie</a>
+                <h5 class="card-title js-card-bubble-title">${lastBubbleMarker.title}</h5>
+                <p class="card-text js-card-bubble-description">${lastBubbleMarker.description}</p>
+                <div class="row">
+                    <div class="col-12">
+                        <a href="#" role="button" class="btn mb-2 w-100 btn-danger js-remove-bubble-marker">Usuń znacznik</a>
+                    </div>
+                    <div class="col-12">
+                        <a href="#" role="button" class="btn mb-2 w-100 btn-primary js-navigate-to-bubble-marker">Pokaż na mapie</a>
+                    </div>
+                    <div class="col-12">
+                        <a href="#" role="button" class="btn w-100 btn-info js-edit-bubble-marker">Edytuj</a>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -323,7 +360,31 @@ function savePlace(polygonId) {
 
     setTimeout(() => {
         capture();
-    }, 2000);
+    }, 3000);
+}
+
+/**
+ * Generate bubble marker html
+ * @param  {string} bubbleTitle
+ * @param  {string} bubbleDescription
+ * @return {string}
+ */
+function generateBubbleMarkerHtml(bubbleTitle, bubbleDescription) {
+    return `
+        <div class="fw-bold bubble-title">${bubbleTitle}</div>
+        <div class="bubble-description">${bubbleDescription}</div>
+    `;
+}
+
+/**
+ * Generate bubble marker icon
+ * @param  {string} bubbleColor
+ * @param  {string} bubbleTitle
+ * @return {H.map.DomIcon}
+ */
+function generateBubbleMarkerIcon(bubbleColor, bubbleTitle) {
+    const outerElement = `<div class="marker-ribbon" style="background-color: ${bubbleColor};">${trimString(bubbleTitle)}</div>`;
+    return new H.map.DomIcon(outerElement, {});
 }
 
 /**
@@ -331,15 +392,11 @@ function savePlace(polygonId) {
  * @param {H.geo.Point} coordinate  The location of the marker
  * @param {String} bubbleTitle          Marker title
  * @param {String} bubbleDescription    Marker description
+ * @param {String} bubbleColor          Marker color
  */
-function addMarkerToGroup(coordinate, bubbleTitle, bubbleDescription) {
-    const html = `
-            <div class="fw-bold bubble-title">${bubbleTitle}</div>
-            <div class="bubble-description">${bubbleDescription}</div>
-
-        `;
-    const outerElement = `<div class="marker-ribbon">${trimString(bubbleTitle)}</div>`;
-    const domIcon = new H.map.DomIcon(outerElement, {});
+function addMarkerToGroup(coordinate, bubbleTitle, bubbleDescription, bubbleColor) {
+    const html = generateBubbleMarkerHtml(bubbleTitle, bubbleDescription);
+    const domIcon = generateBubbleMarkerIcon(bubbleColor, bubbleTitle);
     let marker = new H.map.DomMarker(coordinate, {
         icon: domIcon
     });
@@ -358,6 +415,7 @@ function addMarkerToGroup(coordinate, bubbleTitle, bubbleDescription) {
  * @param {H.geo.Point} coordinate  The location of the marker
  */
 function addPointsToRange(coordinate) {
+    $('#js-remove-last-range-point').prop('disabled', false);
     const marker = new H.map.Marker(coordinate, {
         icon: icon
     });
@@ -381,22 +439,20 @@ function drawRangeLine() {
         rangeLineString.pushLatLngAlt(routeCoord.b.lat, routeCoord.b.lng, 0);
     });
 
-    if (true) {
-        const polyline = new H.map.Polyline(
-            rangeLineString, 
-            {
-                style: 
-                    {
-                        strokeColor: 'rgb(0, 130, 130)',
-                        lineWidth: 2
-                    }
-            }
-        );
+    const polyline = new H.map.Polyline(
+        rangeLineString, 
+        {
+            style: 
+                {
+                    strokeColor: 'rgb(0, 130, 130)',
+                    lineWidth: 2
+                }
+        }
+    );
 
-        polyLinesGroup.addObject(polyline);
-        rangePolylines.push(polyline); 
-        map.addObject(polyLinesGroup);
-    }
+    polyLinesGroup.addObject(polyline);
+    rangePolylines.push(polyline); 
+    map.addObject(polyLinesGroup);
 }
 
 /**
@@ -407,18 +463,30 @@ function drawRangePolygon() {
         return;
     }
 
+    const polygonStyle = {
+        fillColor: 'rgba(0, 255, 221, 0.66)',
+        strokeColor: 'rgba(0, 255, 221, 1)',
+        lineWidth: 2
+    };
+
+    if (rangeColor !== null) {
+        polygonStyle.fillColor = `rgba(${rangeColor.r}, ${rangeColor.g}, ${rangeColor.b}, 0.66)`;
+        polygonStyle.strokeColor = `rgba(${rangeColor.r}, ${rangeColor.g}, ${rangeColor.b}, 1)`;
+    }
+
     const polygon = new H.map.Polygon(rangeLineString, {
         style: {
-            fillColor: 'rgba(0, 255, 221, 0.66)',
-            strokeColor: 'rgba(0, 255, 221, 1)',
-            lineWidth: 2
+            fillColor: polygonStyle.fillColor,
+            strokeColor: polygonStyle.strokeColor,
+            lineWidth: polygonStyle.lineWidth,
         }
     });
 
     polygonGroup.addObject(polygon);
     
     map.addObject(polygonGroup);
-    savePlace(polygon.getId());
+    savePlace(polygonStyle.strokeColor, polygon.getId());
+    $('#js-remove-last-range-point').prop('disabled', true);
 }
 
 /**
@@ -427,8 +495,9 @@ function drawRangePolygon() {
  * @param {string} bubbleTitle
  * @param {string} bubbleDescription
  * @param {object} coord
+ * @param {string} color
  */
-function addInfoBubble(bubbleTitle, bubbleDescription, coord) {
+function addInfoBubble(bubbleTitle, bubbleDescription, coord, color) {
     map.addObject(group);
 
     // add 'tap' event listener, that opens info bubble, to the group
@@ -446,7 +515,8 @@ function addInfoBubble(bubbleTitle, bubbleDescription, coord) {
     addMarkerToGroup(
         {lat: coord.lat, lng: coord.lng },
         bubbleTitle,
-        bubbleDescription
+        bubbleDescription,
+        color
     );
 }
 
@@ -489,6 +559,93 @@ function getCardPolygonId($placeCard) {
     return parseInt($placeCard.attr('data-polygon-id'), 10);
 }
 
+
+function removeLastRangeStep() {
+    const rangePoints = rangeGroupPoints.getObjects();
+    const pointsCount = rangePoints.length;
+    if (pointsCount <= 3) {
+        $('#js-stop-add-range').prop('disabled', true);
+    }
+    const lastPoint = rangePoints.pop();
+    if (!$.isEmptyObject(lastPoint)) {
+        rangeGroupPoints.removeObject(lastPoint);
+    }
+
+    rangeMarkers.pop();
+
+    if (pointsCount === 1) {
+        $('#js-remove-last-range-point').prop('disabled', true);
+        return;
+    }
+
+    const lastPolyline = polyLinesGroup.getObjects().pop();
+    if (!$.isEmptyObject(lastPolyline)) {
+        polyLinesGroup.removeObject(lastPolyline);
+    }
+}
+
+
+/**
+ * Edit place data
+ * @param  {jQueryObject} $placeCard
+ */
+async function editPlace($placeCard) {
+    const bubbleMarkerId = getCardBubbleMarkerId($placeCard);
+    const bubbleColor = $placeCard.attr('data-color');
+    const $bubbleTitleHandler = $placeCard.find('.js-card-bubble-title').first();
+    const $bubbleDescriptionHandler = $placeCard.find('.js-card-bubble-description').first();
+    const bubbleMarkerTitle = $bubbleTitleHandler.text();
+    const bubbleMarkerDescription = $bubbleDescriptionHandler.text();
+
+    const { value: formValues } = await Swal.fire({
+        title: 'Edytuj dane',
+        html: `
+            <label for="swal-bubble-title" class="swal2-input-label">Tytuł:</label>
+            <input class="swal2-input custom-size d-flex" id="swal-bubble-title" placeholder="Tytuł np. nazwa firmy" type="text"
+                value="${bubbleMarkerTitle.trim()}"
+                >
+            <label for="swal-bubble-description" class="swal2-input-label">Opis:</label>
+            <textarea aria-label="Umieść tutaj opis..." class="swal2-textarea custom-size d-flex" 
+                placeholder="Umieść tutaj opis..." id="swal-bubble-description">${bubbleMarkerDescription.trim()}</textarea>
+            `,
+        showCancelButton: true,
+        showClass: {
+            popup: 'animate__animated animate__fadeInDown'
+        },
+        hideClass: {
+            popup: 'animate__animated animate__fadeOutUp'
+        },
+        focusConfirm: false,
+        preConfirm: () => {
+            return [
+                $('#swal-bubble-title').val(),
+                $('#swal-bubble-description').val()
+            ];
+        }
+    });
+
+    if (formValues) {
+        const [title, description] = formValues;
+
+        $bubbleTitleHandler.text(title);
+        $bubbleDescriptionHandler.text(description);
+        const bubbleMarkers = group.getObjects().filter((item) => {
+             return item.getId() === bubbleMarkerId;
+        });
+
+        const html = generateBubbleMarkerHtml(title, description);
+        const domIcon = generateBubbleMarkerIcon(bubbleColor, title);
+        bubbleMarkers[0].setData(html);
+        bubbleMarkers[0].setIcon(domIcon);
+
+        // console.log(bubbleMarkers[0].getData());
+
+
+        //addInfoBubble(title, description, coord, color);
+    
+    }
+}
+
 $(document).ready(function() {
     window.addEventListener('resize', () => map.getViewPort().resize());
     $(document).on('click', '.js-navigate-to-bubble-marker', function() {
@@ -515,12 +672,21 @@ $(document).ready(function() {
             return item.getId() === polygonId;
         });
 
-        polygonGroup.removeObject(polygons[0]);
+        if (polygons.length > 0) {
+            polygonGroup.removeObject(polygons[0]);
+        }
+        
         $placeCard.fadeOut(300, function() {
             $(this).remove();
         });
 
     });
+
+    $(document).on('click', '.js-edit-bubble-marker', function() {
+        $('#js-saved-places').hide();
+        editPlace($(this).closest('.js-place-card').first());
+    });
+    
 
 
     
@@ -543,6 +709,10 @@ $(document).ready(function() {
 
     $('#js-add-marker').click(() => {
         toggleMarkerMode($(this));
+    });
+
+    $('#js-remove-last-range-point').click(() => {
+        removeLastRangeStep();
     });
 
     $('#js-stop-add-range').click(() => {
@@ -608,359 +778,321 @@ function configLayers() {
 
 
 
-/**
- * calculateDistance Calculate distance of drawed route
- * @param  {Boolean} isRemovedMarker Do you want recalculate distance after remove marker? [optional]
- */
-function calculateDistance(isRemovedMarker = false)
-{
-    if (isRemovedMarker && waypoints.length == 1) {
-        resetDistance();
-    }
+// /**
+//  * calculateDistance Calculate distance of drawed route
+//  * @param  {Boolean} isRemovedMarker Do you want recalculate distance after remove marker? [optional]
+//  */
+// function calculateDistance(isRemovedMarker = false)
+// {
+//     if (isRemovedMarker && waypoints.length == 1) {
+//         resetDistance();
+//     }
 
-    if(waypoints.length > 1) {
-        calculateRouteData(isRemovedMarker).then((result) => {
-            showDistance(result);
-        }).catch((errorData) => {
-            showMapResponse('Cannot calculate route.');
-        });            
-    }
-}
-
-
+//     if(waypoints.length > 1) {
+//         calculateRouteData(isRemovedMarker).then((result) => {
+//             showDistance(result);
+//         }).catch((errorData) => {
+//             showMapResponse('Cannot calculate route.');
+//         });            
+//     }
+// }
 
 
 
 
 
 
+// /**
+//  * calculateRouteData Prepare and do call to api
+//  * @param  {Boolean} isRemovedMarker Do you want recalculate distance after remove marker?
+//  * @param  {Boolean} needElevation   Do you want to get elevation data (altitude)? [optional]
+//  */
+// function calculateRouteData(isRemovedMarker, needElevation = false)
+// {
+//     return new Promise( (resolve, reject) => {
+//         var routingParameters = {
+//             mode: 'shortest;pedestrian',
+//             routeattributes : 'summary,shape',
+//             representation: 'display',
+//             returnElevation: needElevation
+//         };
+
+//         //Add all waypoints to route
+//         var index = 0;
+//         waypoints.forEach( (waypoint) => {
+//             routingParameters['waypoint' + index++] = 'geo!' + waypoint.coord.lat + ',' + waypoint.coord.lng;
+//         });
+
+//         var routingService = platform.getRoutingService();
+//         routingService.calculateRoute(routingParameters, result => {
+//             let response = result.response;
+//             if (response.route[0]) {
+//                 var lineString = new H.geo.LineString();
+//                 response.route[0].shape.forEach(routeCoord => {
+//                     var routeCoordArray = routeCoord.split(',');
+
+//                     lineString.pushLatLngAlt(routeCoordArray[0], routeCoordArray[1], 0);
+//                 });
+
+//                 if (!isRemovedMarker) {
+//                     var polyline = new H.map.Polyline(
+//                         lineString, 
+//                         {
+//                             style: 
+//                                 {
+//                                     strokeColor: 'rgb(0, 130, 130)',
+//                                     lineWidth: 2
+//                                 }
+//                         }
+//                     );
+//                     routePolylines.push(polyline); 
+//                     map.addObject(polyline);
+//                 }
+
+//                 resolve(response.route[0]);
+//             }
+//         }, 
+//             error => { 
+//                 reject(error);
+//         });
+//     });
+// }
+
+// /**
+//  * showDistance Show total distance on map panel
+//  * @param  {Array} routeData Array with route data 
+//  */
+// function showDistance(routeData)
+// {
+//     var routeDistanceTotal = routeData.summary.distance;
+//     distanceTotal = (routeDistanceTotal/1000);
+
+//     if (routeDistanceTotal < 1000) {
+//         document.getElementById('distance-js').innerHTML = routeDistanceTotal+" m";
+//     } else {
+//         document.getElementById('distance-js').innerHTML = distanceTotal+" km";
+//     }
+// }
+
+// /**
+//  * resetDistance Reset distance on the map panel
+//  */
+// function resetDistance()
+// {
+//     document.getElementById('distance-js').innerHTML = "0 m";
+// }
+
+// /**
+//  * removeMapResponse Remove info panel message
+//  */
+// function removeMapResponse()
+// {
+//     var $infoPanel = $("#info-panel");
+//     var $infoMessage = $("#info-message-js");
+//     $infoPanel.fadeOut(500, () => {
+//         $infoMessage.html('');
+//     });
+// }
 
 
+// /**
+//  * removeLastWaypointMarker Remove last route marker
+//  */
+// function removeLastWaypointMarker()
+// {
+//     if(waypoints.length > 0) {
+//         var lastWaypoint = waypoints.pop();
+//         var lastMarker = markers.pop();
+//         map.removeObject(lastMarker);
+//         var lastPolyline = routePolylines.pop();
+//         if (lastPolyline) {
+//             map.removeObject(lastPolyline);
+//         }
+//         calculateDistance(true);
+//     } else {
+//         showMapResponse('No more markers to delete.');
+//     }
+// }
 
+// /**
+//  * removeAllWaypointsMarkers Reset route
+//  */
+// function removeAllWaypointsMarkers()
+// {
+//     if(waypoints.length > 0) {
+//         waypoints.length = 0;
+//         markers.length = 0;
+//         routePolylines.length = 0;
+//         map.removeObjects(map.getObjects());
+//         resetDistance();
+//     } else {
+//         showMapResponse('No more markers to delete.');
+//     }
+// }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/**
- * calculateRouteData Prepare and do call to api
- * @param  {Boolean} isRemovedMarker Do you want recalculate distance after remove marker?
- * @param  {Boolean} needElevation   Do you want to get elevation data (altitude)? [optional]
- */
-function calculateRouteData(isRemovedMarker, needElevation = false)
-{
-    return new Promise( (resolve, reject) => {
-        var routingParameters = {
-            mode: 'shortest;pedestrian',
-            routeattributes : 'summary,shape',
-            representation: 'display',
-            returnElevation: needElevation
-        };
-
-        //Add all waypoints to route
-        var index = 0;
-        waypoints.forEach( (waypoint) => {
-            routingParameters['waypoint' + index++] = 'geo!' + waypoint.coord.lat + ',' + waypoint.coord.lng;
-        });
-
-        var routingService = platform.getRoutingService();
-        routingService.calculateRoute(routingParameters, result => {
-            let response = result.response;
-            if (response.route[0]) {
-                var lineString = new H.geo.LineString();
-                response.route[0].shape.forEach(routeCoord => {
-                    var routeCoordArray = routeCoord.split(',');
-
-                    lineString.pushLatLngAlt(routeCoordArray[0], routeCoordArray[1], 0);
-                });
-
-                if (!isRemovedMarker) {
-                    var polyline = new H.map.Polyline(
-                        lineString, 
-                        {
-                            style: 
-                                {
-                                    strokeColor: 'rgb(0, 130, 130)',
-                                    lineWidth: 2
-                                }
-                        }
-                    );
-                    routePolylines.push(polyline); 
-                    map.addObject(polyline);
-                }
-
-                resolve(response.route[0]);
-            }
-        }, 
-            error => { 
-                reject(error);
-        });
-    });
-}
-
-/**
- * showDistance Show total distance on map panel
- * @param  {Array} routeData Array with route data 
- */
-function showDistance(routeData)
-{
-    var routeDistanceTotal = routeData.summary.distance;
-    distanceTotal = (routeDistanceTotal/1000);
-
-    if (routeDistanceTotal < 1000) {
-        document.getElementById('distance-js').innerHTML = routeDistanceTotal+" m";
-    } else {
-        document.getElementById('distance-js').innerHTML = distanceTotal+" km";
-    }
-}
-
-/**
- * resetDistance Reset distance on the map panel
- */
-function resetDistance()
-{
-    document.getElementById('distance-js').innerHTML = "0 m";
-}
-
-/**
- * removeMapResponse Remove info panel message
- */
-function removeMapResponse()
-{
-    var $infoPanel = $("#info-panel");
-    var $infoMessage = $("#info-message-js");
-    $infoPanel.fadeOut(500, () => {
-        $infoMessage.html('');
-    });
-}
-
-
-/**
- * removeLastWaypointMarker Remove last route marker
- */
-function removeLastWaypointMarker()
-{
-    if(waypoints.length > 0) {
-        var lastWaypoint = waypoints.pop();
-        var lastMarker = markers.pop();
-        map.removeObject(lastMarker);
-        var lastPolyline = routePolylines.pop();
-        if (lastPolyline) {
-            map.removeObject(lastPolyline);
-        }
-        calculateDistance(true);
-    } else {
-        showMapResponse('No more markers to delete.');
-    }
-}
-
-/**
- * removeAllWaypointsMarkers Reset route
- */
-function removeAllWaypointsMarkers()
-{
-    if(waypoints.length > 0) {
-        waypoints.length = 0;
-        markers.length = 0;
-        routePolylines.length = 0;
-        map.removeObjects(map.getObjects());
-        resetDistance();
-    } else {
-        showMapResponse('No more markers to delete.');
-    }
-}
-
-/**
- * sendData Send workout data to server to process it
- * @param event 
- */
-function sendData(event)
-{
-    disableButton($(event.target));
-    event.preventDefault();
-    removeFormErrors();
-    if (waypoints.length > 1) {
+// /**
+//  * sendData Send workout data to server to process it
+//  * @param event 
+//  */
+// function sendData(event)
+// {
+//     disableButton($(event.target));
+//     event.preventDefault();
+//     removeFormErrors();
+//     if (waypoints.length > 1) {
         
-        const $form = $('.js-new-workout-form');
-        var formData = {};
-        //Group formData because I don't want allow_extra_fields in form
-        formData['formData'] = {}
-        formData['formData']['durationSecondsTotal'] = {};
+//         const $form = $('.js-new-workout-form');
+//         var formData = {};
+//         //Group formData because I don't want allow_extra_fields in form
+//         formData['formData'] = {}
+//         formData['formData']['durationSecondsTotal'] = {};
 
-        for(let fieldData of $form.serializeArray()) {        
-            if(fieldData.name == 'durationSecondsTotal[hour]'){
-                formData['formData']['durationSecondsTotal']['hour'] = fieldData.value;
-            } else if(fieldData.name == 'durationSecondsTotal[minute]') {
-                formData['formData']['durationSecondsTotal']['minute'] = fieldData.value;
-            } else if(fieldData.name == 'durationSecondsTotal[second]') {
-                formData['formData']['durationSecondsTotal']['second'] = fieldData.value;
-            } else {
-                formData['formData'][fieldData.name] = fieldData.value;
-            }
-            if (!fieldData.value) {
-                enableButton($(event.target));
-                showMapResponse('Form data is missing.');
-                return;
-            }
-        }
+//         for(let fieldData of $form.serializeArray()) {        
+//             if(fieldData.name == 'durationSecondsTotal[hour]'){
+//                 formData['formData']['durationSecondsTotal']['hour'] = fieldData.value;
+//             } else if(fieldData.name == 'durationSecondsTotal[minute]') {
+//                 formData['formData']['durationSecondsTotal']['minute'] = fieldData.value;
+//             } else if(fieldData.name == 'durationSecondsTotal[second]') {
+//                 formData['formData']['durationSecondsTotal']['second'] = fieldData.value;
+//             } else {
+//                 formData['formData'][fieldData.name] = fieldData.value;
+//             }
+//             if (!fieldData.value) {
+//                 enableButton($(event.target));
+//                 showMapResponse('Form data is missing.');
+//                 return;
+//             }
+//         }
 
-        calculateRouteData(true, true).then((result) => {
-            captureImageAndSaveWorkout(formData, result);
-        }).catch((errorData) => {
-            showMapResponse('Cannot recalculate route. Try again.');
-        });      
-    } else {
-        showMapResponse('Draw your route first.');   
-    }
-    enableButton($(event.target));
-}
+//         calculateRouteData(true, true).then((result) => {
+//             captureImageAndSaveWorkout(formData, result);
+//         }).catch((errorData) => {
+//             showMapResponse('Cannot recalculate route. Try again.');
+//         });      
+//     } else {
+//         showMapResponse('Draw your route first.');   
+//     }
+//     enableButton($(event.target));
+// }
 
-/**
- * captureImageAndSaveWorkout Get image of workout and send all data to database
- * @param  {Array} formData  Array with form data
- * @param  {Array} routeData Array with route data
- */
-function captureImageAndSaveWorkout(formData, routeData)
-{
-    var url = document.getElementById('continue-js').getAttribute('data-url');
-    map.capture((canvas) => {
-        if (canvas) {
-            var mapImage = canvas.toDataURL();
-            formData['distanceTotal'] = distanceTotal;
-            formData['image'] = mapImage;
-            formData['routeData'] = routeData.shape;
+// /**
+//  * captureImageAndSaveWorkout Get image of workout and send all data to database
+//  * @param  {Array} formData  Array with form data
+//  * @param  {Array} routeData Array with route data
+//  */
+// function captureImageAndSaveWorkout(formData, routeData)
+// {
+//     var url = document.getElementById('continue-js').getAttribute('data-url');
+//     map.capture((canvas) => {
+//         if (canvas) {
+//             var mapImage = canvas.toDataURL();
+//             formData['distanceTotal'] = distanceTotal;
+//             formData['image'] = mapImage;
+//             formData['routeData'] = routeData.shape;
         
-            saveWorkout(formData,url).then((result) => {
-                window.location.href = result.url;
-            }).catch((errorData) => {
-                if (errorData.type !== 'form_validation_error') {
-                    showMapResponse(errorData.title);
-                } else {
-                    mapErrorsToForm(errorData);
-                }                    
-            });
-        } else {
-            showMapResponse('Capturing is not supported.');
-        }
-    }, []);
-}
+//             saveWorkout(formData,url).then((result) => {
+//                 window.location.href = result.url;
+//             }).catch((errorData) => {
+//                 if (errorData.type !== 'form_validation_error') {
+//                     showMapResponse(errorData.title);
+//                 } else {
+//                     mapErrorsToForm(errorData);
+//                 }                    
+//             });
+//         } else {
+//             showMapResponse('Capturing is not supported.');
+//         }
+//     }, []);
+// }
 
-/**
- * saveWorkout Send workout data to server and get response
- * @param  {Array} data Array with workout data
- * @param  {String} url Url to server method
- */
-function saveWorkout(data, url) {
-    return new Promise( (resolve, reject) => {
-        $.ajax({
-            url,
-            method: 'POST',
-            data: JSON.stringify(data)
-        }).then((result) => {
-            resolve(result);
-        }).catch((jqXHR) => {
-            let statusError = [];
-            statusError = getStatusError(jqXHR);
-            if(statusError != null) {
-                reject(statusError);
-            } else {
-                const errorData = JSON.parse(jqXHR.responseText);
-                reject(errorData);
-            }
-        });
-    });
-}
+// /**
+//  * saveWorkout Send workout data to server and get response
+//  * @param  {Array} data Array with workout data
+//  * @param  {String} url Url to server method
+//  */
+// function saveWorkout(data, url) {
+//     return new Promise( (resolve, reject) => {
+//         $.ajax({
+//             url,
+//             method: 'POST',
+//             data: JSON.stringify(data)
+//         }).then((result) => {
+//             resolve(result);
+//         }).catch((jqXHR) => {
+//             let statusError = [];
+//             statusError = getStatusError(jqXHR);
+//             if(statusError != null) {
+//                 reject(statusError);
+//             } else {
+//                 const errorData = JSON.parse(jqXHR.responseText);
+//                 reject(errorData);
+//             }
+//         });
+//     });
+// }
 
-/**
- * getStatusError Get status error and return proper message
- * @param jqXHR 
- * @return {Array} Array with message
- */
-function getStatusError(jqXHR) {
-    if (jqXHR.getResponseHeader('content-type') === 'application/problem+json') {
-        return null;
-    }
+// /**
+//  * getStatusError Get status error and return proper message
+//  * @param jqXHR 
+//  * @return {Array} Array with message
+//  */
+// function getStatusError(jqXHR) {
+//     if (jqXHR.getResponseHeader('content-type') === 'application/problem+json') {
+//         return null;
+//     }
 
-    if(jqXHR.status === 0) {
-        return {
-            "title":"Cannot connect. Verify Network."
-        }
-    } else if(jqXHR.status === 404) {
-        return {
-            "title":"Requested not found."
-        }
-    } else if(jqXHR.status === 500) {
-        return {
-            "title":"Internal Server Error"
-        }
-    } else if(jqXHR.status > 400) {
-        return {
-            "title":"Error. Contact with admin."
-        }
-    }
-    return null;
-}
+//     if(jqXHR.status === 0) {
+//         return {
+//             "title":"Cannot connect. Verify Network."
+//         }
+//     } else if(jqXHR.status === 404) {
+//         return {
+//             "title":"Requested not found."
+//         }
+//     } else if(jqXHR.status === 500) {
+//         return {
+//             "title":"Internal Server Error"
+//         }
+//     } else if(jqXHR.status > 400) {
+//         return {
+//             "title":"Error. Contact with admin."
+//         }
+//     }
+//     return null;
+// }
 
-/**
- * mapErrorsToForm Map errors to proper form fields
- * @param  {Array} errorData Array with form errors
- */
-function mapErrorsToForm(errorData)
-{
-    var $form = $('.js-new-workout-form');
+// /**
+//  * mapErrorsToForm Map errors to proper form fields
+//  * @param  {Array} errorData Array with form errors
+//  */
+// function mapErrorsToForm(errorData)
+// {
+//     var $form = $('.js-new-workout-form');
 
-    for (let element of $form.find(':input')) {
-        let fieldName = $(element).attr('name');
-        const $fieldWrapper = $(element).closest('.form-group');
+//     for (let element of $form.find(':input')) {
+//         let fieldName = $(element).attr('name');
+//         const $fieldWrapper = $(element).closest('.form-group');
 
-        if(fieldName == 'durationSecondsTotal[hour]') {
-            fieldName = 'durationSecondsTotal';
-        }
+//         if(fieldName == 'durationSecondsTotal[hour]') {
+//             fieldName = 'durationSecondsTotal';
+//         }
 
-        if (!errorData[fieldName]) {
-            continue;
-        }
+//         if (!errorData[fieldName]) {
+//             continue;
+//         }
 
-        const $error = $('<span class="js-field-error help-block text-danger"></span>');
-        $error.html(errorData[fieldName]);
-        $fieldWrapper.append($error);
-        $fieldWrapper.addClass('has-error');
-    }
-}
+//         const $error = $('<span class="js-field-error help-block text-danger"></span>');
+//         $error.html(errorData[fieldName]);
+//         $fieldWrapper.append($error);
+//         $fieldWrapper.addClass('has-error');
+//     }
+// }
 
-/**
- * removeFormErrors Remove all errors from form fields
- */
-function removeFormErrors() {
-    var $form = $('.js-new-workout-form');
-    $form.find('.js-field-error').remove();
-    $form.find('.form-group').removeClass('has-error');
-}
+// /**
+//  * removeFormErrors Remove all errors from form fields
+//  */
+// function removeFormErrors() {
+//     var $form = $('.js-new-workout-form');
+//     $form.find('.js-field-error').remove();
+//     $form.find('.form-group').removeClass('has-error');
+// }

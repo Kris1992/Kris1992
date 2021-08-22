@@ -39,6 +39,14 @@
                                                 Miejsca
                                             </a>
                                         </li>
+                                        <li class="nav-item">
+                                            <span class="badge badge-pill badge-primary menu-badge">
+                                                1
+                                            </span>
+                                            <a class="nav-link" role="button" data-bs-toggle="offcanvas" href="#js-messages">
+                                                Wiadomości
+                                            </a>
+                                        </li>
                                         <li class="nav-item dropdown">
                                             <a class="nav-link dropdown-toggle" href="#" id="js-user-account-menu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                                 Moje Konto
@@ -81,6 +89,28 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="offcanvas offcanvas-start" tabindex="-1" id="js-messages" aria-labelledby="offcanvas-messages-label">
+                                <div class="offcanvas-header">
+                                    <h5 class="offcanvas-title" id="offcanvas-messages-label">Wiadomości przychodzące</h5>
+                                    <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                                </div>
+                                <div class="offcanvas-body">
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div id="js-empty-messages">
+                                                <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                                                    <strong>Uwaga!</strong> Niestety aktualnie nie posiadasz nowych wiadomości. Funkcjonalność będzie dostępna wkrótce...
+                                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-12" id="js-messages-list">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="row">
                                 <div class="col-12 p-0">
                                     <div id="js-map-container" style="position: relative;">
@@ -106,6 +136,9 @@
                                                         </button>   
                                                     </div>
                                                     <div class="col-4 text-end">
+                                                        <button class="btn btn-danger" type="button" role="button" data-toggle="tooltip" data-placement="top" title="Usuń ostatni punkt zasięgu" id="js-remove-last-range-point" disabled="true">
+                                                            <i class="fas fa-undo"></i>
+                                                        </button> 
                                                         <button class="btn btn-danger" type="button" role="button" data-toggle="tooltip" data-placement="top" title="Zatrzymaj dodawanie punktów zasięgu" id="js-stop-add-range" disabled="true">
                                                             <i class="fas fa-stop-circle"></i>
                                                         </button>  

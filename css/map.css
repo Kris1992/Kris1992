@@ -44,6 +44,11 @@
     max-width: 350px;
 }
 
+.menu-badge {
+    float: right;
+    margin-bottom: -10px;
+}
+
 @media (max-height: 400px) {
     .custom-size {
         width: 80%;
