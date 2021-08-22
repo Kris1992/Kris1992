@@ -427,6 +427,16 @@ function addPointsToRange(coordinate) {
 }
 
 /**
+ * Generate range line String
+ */
+function generateRangeLineString() {
+    rangeLineString = new H.geo.LineString();
+    rangeMarkers.forEach(routeCoord => {
+        rangeLineString.pushLatLngAlt(routeCoord.b.lat, routeCoord.b.lng, 0);
+    });
+}
+
+/**
  * Draw line from range points
  */
 function drawRangeLine() {
@@ -434,11 +444,7 @@ function drawRangeLine() {
         return;
     }
 
-    rangeLineString = new H.geo.LineString();
-    rangeMarkers.forEach(routeCoord => {
-        rangeLineString.pushLatLngAlt(routeCoord.b.lat, routeCoord.b.lng, 0);
-    });
-
+    generateRangeLineString();
     const polyline = new H.map.Polyline(
         rangeLineString, 
         {
@@ -563,6 +569,7 @@ function getCardPolygonId($placeCard) {
 function removeLastRangeStep() {
     const rangePoints = rangeGroupPoints.getObjects();
     const pointsCount = rangePoints.length;
+
     if (pointsCount <= 3) {
         $('#js-stop-add-range').prop('disabled', true);
     }
@@ -572,6 +579,7 @@ function removeLastRangeStep() {
     }
 
     rangeMarkers.pop();
+    generateRangeLineString();
 
     if (pointsCount === 1) {
         $('#js-remove-last-range-point').prop('disabled', true);
@@ -637,12 +645,6 @@ async function editPlace($placeCard) {
         const domIcon = generateBubbleMarkerIcon(bubbleColor, title);
         bubbleMarkers[0].setData(html);
         bubbleMarkers[0].setIcon(domIcon);
-
-        // console.log(bubbleMarkers[0].getData());
-
-
-        //addInfoBubble(title, description, coord, color);
-    
     }
 }
 
@@ -687,13 +689,7 @@ $(document).ready(function() {
         editPlace($(this).closest('.js-place-card').first());
     });
     
-
-
-    
     addClickEventListener();
-
-
-
 
     $('#js-current-position').click(() => {
         showCurrentLocation();
@@ -732,13 +728,6 @@ $(document).ready(function() {
         rangePolylines.length = 0;
 
     });
-    
-
-  
-    //document.getElementById("remove-last-js").addEventListener("click", removeLastWaypointMarker);
-    //document.getElementById("remove-all-js").addEventListener("click", removeAllWaypointsMarkers);
-    //document.getElementById("continue-js").addEventListener("click", sendData);
-    //document.getElementById("remove-message-js").addEventListener("click", removeMapResponse);
 });
 
 /**
