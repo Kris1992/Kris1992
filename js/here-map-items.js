@@ -685,8 +685,8 @@ $(document).ready(function() {
     });
 
     $(document).on('click', '.js-edit-bubble-marker', function() {
-        $('#js-saved-places').hide();
-        editPlace($(this).closest('.js-place-card').first());
+        $('#js-saved-places').offcanvas('hide');
+        editPlace($(this).closest('.js-place-card').first());        
     });
     
     addClickEventListener();
